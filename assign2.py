@@ -18,9 +18,33 @@ import codecs
 import os
 import sys
 
+base_path = os.getcwd()
 lmtzr = WordNetLemmatizer()
-global IDF
+
+class TfIdf:
+    def __init__(self, lines):
+        result = {}
+        words = set()
+        total_count = 0
+        for line in lines:
+            for word in line.split():
+                words.add(word)
+                total_count += 1
+        for word in words:
+            result[word] = 0
  
+        for line in lines:
+            for word in words:
+                if word in line:
+                    result[word] += 1
+        for i,j in result.items():
+            result[i] = log(total_count/j, 2)
+        self.result = result
+ 
+    @property
+    def result(self):
+        return self.result
+
 def getTop2000Words(lines):
     words = {}
     for line in lines:
@@ -33,13 +57,22 @@ def getTop2000Words(lines):
     words = words.items()
     words.sort(key = lambda x: x[1], reverse=True)
     return [ i[0] for i in words[:2000]]
- 
+
 def filter_top_words(lines, words):
     legal_lines = []
     for line in lines:
         line = filter(lambda x: x in words, line.split())
         legal_lines.append(' '.join(line))
     return legal_lines
+
+def filter_stop_words(lines):
+    s_words = stop_words()
+    unstop_lines = []
+    for line in lines:
+        _ = filter(lambda x: x not in s_words, line.strip().split())
+        unstop_lines.append(' '.join(_))
+    return unstop_lines
+
  
 def wordStemming(line):
     line = line.strip().split()
@@ -66,56 +99,24 @@ def stop_words():
             words.append(word.strip())
     return words
  
-def filter_stop_words(lines):
-    s_words = stop_words()
-    unstop_lines = []
-    for line in lines:
-        _ = filter(lambda x: x not in s_words, line.strip().split())
-        unstop_lines.append(' '.join(_))
-    return unstop_lines
- 
-def return_big(word, num=2):
+
+def filter_splashes(word, num=2):
     if len(word) > num:
         return word
- 
+
 def filter_punctuation(lines):
     lines = map(lambda x: x.replace('.', ' ').replace(',', ' ').replace('"', ' ').replace( "'", ' ')\
             .replace('(', ' ').replace(')', ' ').replace(':', ' ')\
             .replace('--', ' ').replace('/', ' '), lines) 
+
     # table = string.maketrans("","")
     # filter_lines = []
     # for line in lines:
     #     filter_lines.append(line.translate(table, string.punctuation))
-    # print filter_lines
 
-    lines = map(lambda x: ' '.join(filter(lambda i:return_big(i), x.split())) , lines)
+    lines = map(lambda x: ' '.join(filter(lambda i:filter_splashes(i), x.split())) , lines)
     return lines
- 
-class idf(object):
-    def __init__(self, lines):
-        result = {}
-        words = set()
-        total_count = 0
-        for line in lines:
-            for word in line.split():
-                words.add(word)
-                total_count += 1
-        for word in words:
-            result[word] = 0
- 
-        for line in lines:
-            for word in words:
-                if word in line:
-                    result[word] += 1
-        for i,j in result.items():
-            result[i] = log(total_count/j, 2)
-        self.result = result
- 
-    @property
-    def res(self):
-        return self.result
- 
- 
+  
 def tf_idf(word, line):
     global IDF
     tf = frequence(word, line)
@@ -125,33 +126,17 @@ def tf_idf(word, line):
 def frequence(word, line):
     return line.count(word)/len(line)
  
-METHOD = dict(
-        TF_IDF = tf_idf,
-        FREQUENCE = frequence,
-        )
- 
 def generateUnigramFeatures(lines, method='TF_IDF'):
     result = []
     for line in lines:
         line_result = {}
         for word in line.split():
-            line_result[word] = METHOD[method](word, line)
+            if method == TF_IDF:
+                line_result[word] = tf_idf(word,line)    
+            else:
+                 line_result[word] = frequence(word,line)
         result.append(line_result)
     return result   
- 
-def baye(word_one, word_two, line):
-    result = line.count('%s %s'%(word_one, word_two))/ line.count(word_one)
-    return result
- 
-def generateBigramFeatures(lines):
-    result = []
-    for line in lines:
-        line_result = {}
-        words = line.split()
-        for i in xrange(len(words)-1):
-            line_result['%s-%s'%(words[i], words[i+1])] = baye(words[i], words[i+1], line)
-        result.append(line_result)
-    return result
  
 def neg_sentence():
     neg_lines = []
@@ -172,22 +157,40 @@ DATA_TYPE = dict(
             train = 4/5
         )
  
-def chop(data_list, data_type, data_corpus):
+def chop(data_list, data_type, data_fold):
     data_len = len(data_list)
     data = []
     if data_type == 'train':
-        data.extend(data_list[0:int(data_len*(data_corpus-1)/5)])
-        if data_corpus<5:
-            data.extend(data_list[int(data_len*(data_corpus)/5):])
+        data.extend(data_list[0:int(data_len*(data_fold-1)/5)])
+        if data_fold<5:
+            data.extend(data_list[int(data_len*(data_fold)/5):])
     else:
-        data.extend(data_list[int(data_len*(data_corpus-1)/5):int(data_len*(data_corpus/5))])
+        data.extend(data_list[int(data_len*(data_fold-1)/5):int(data_len*(data_fold/5))])
     return data
- 
-def expriment_one(data_type='train', corpus=1):
+
+
+def format_result(neg_result, pos_result, names, data_type, fold):
+    result = ""
+    for res in chop(neg_result, data_type, fold):
+        result += '-1'
+        _ = res.items()
+        _.sort(key=lambda x:names[x[0]])
+        for k,v in _:
+            result += ' %s:%s'%(names[k],v)
+        result += '\n'
+    for res in chop(pos_result, data_type, fold):
+        result += '1'
+        _ = res.items()
+        _.sort(key=lambda x:names[x[0]])
+        for k,v in _:
+            result += ' %s:%s'%(names[k],v)
+        result += '\n'
+    return result
+
+def preprocess_one(data_type, fold):
     neg_lines = neg_sentence()
     pos_lines = pos_sentence()
     neg_lines = filter_punctuation(neg_lines)
-    # print neg_lines;
     pos_lines = filter_punctuation(pos_lines)
     neg_lines = filter_stop_words(neg_lines)
     pos_lines = filter_stop_words(pos_lines)
@@ -197,9 +200,9 @@ def expriment_one(data_type='train', corpus=1):
     names = mapWordsToIDs(lines)
     neg_result = generateUnigramFeatures(neg_lines, method='FREQUENCE')
     pos_result = generateUnigramFeatures(pos_lines, method='FREQUENCE')
-    return format_result(neg_result, pos_result, names, data_type, corpus)
- 
-def expriment_two(data_type='train', corpus=1):
+    return format_result(neg_result, pos_result, names, data_type, fold)
+
+def preprocess_two(data_type, fold):
     neg_lines = neg_sentence()
     pos_lines = pos_sentence()
     neg_lines = filter_punctuation(neg_lines)
@@ -215,29 +218,26 @@ def expriment_two(data_type='train', corpus=1):
     names = mapWordsToIDs(lines)
     neg_result = generateUnigramFeatures(neg_lines, method='FREQUENCE')
     pos_result = generateUnigramFeatures(pos_lines, method='FREQUENCE')
-    return format_result(neg_result, pos_result, names, data_type, corpus)
+    return format_result(neg_result, pos_result, names, data_type, fold)
  
-def expriment_three(data_type='train', corpus=1):
+def preprocess_three(data_type, fold):
     neg_lines = neg_sentence()
     pos_lines = pos_sentence()
     neg_lines = filter_punctuation(neg_lines)
     pos_lines = filter_punctuation(pos_lines)
     neg_lines = filter_stop_words(neg_lines)
     pos_lines = filter_stop_words(pos_lines)
-    neg_lines = filter(lambda x:wordStemming(x), neg_lines)
-    pos_lines = filter(lambda x:wordStemming(x), pos_lines)
  
     lines = []
     lines.extend(neg_lines)
     lines.extend(pos_lines)
     global IDF
-    IDF = idf(lines)
-    names = mapWordsToIDs(lines)
-    neg_result = generateUnigramFeatures(neg_lines, method='TF_IDF')
-    pos_result = generateUnigramFeatures(pos_lines, method='TF_IDF')
-    return format_result(neg_result, pos_result, names, data_type, corpus)
- 
-def expriment_four(data_type='train', corpus=1):
+    # IDF = idf(lines)
+    # names = mapWordsToIDs(lines)
+    # neg_result = generateUnigramFeatures(neg_lines, method='TF_IDF')
+    # pos_result = generateUnigramFeatures(pos_lines, method='TF_IDF')
+    # return format_result(neg_result, pos_result, names, data_type, fold)
+def preprocess_four(data_type, fold): 
     neg_lines = neg_sentence()
     pos_lines = pos_sentence()
     neg_lines = filter_punctuation(neg_lines)
@@ -257,100 +257,76 @@ def expriment_four(data_type='train', corpus=1):
     names = mapWordsToIDs(lines)
     neg_result = generateUnigramFeatures(neg_lines, method='FREQUENCE')
     pos_result = generateUnigramFeatures(pos_lines, method='FREQUENCE')
-    return format_result(neg_result, pos_result, names, data_type, corpus)
- 
-def expriment_five(data_type='train', corpus=1):
-    neg_lines = neg_sentence()
-    pos_lines = pos_sentence()
-    neg_lines = filter_punctuation(neg_lines)
-    pos_lines = filter_punctuation(pos_lines)
-    neg_lines = filter_stop_words(neg_lines)
-    pos_lines = filter_stop_words(pos_lines)
-    lines = []
-    lines.extend(neg_lines)
-    lines.extend(pos_lines)
-    global IDF
-    IDF = idf(lines)
-    
-    neg_result = generateBigramFeatures(neg_lines)
-    pos_result = generateBigramFeatures(pos_lines)
-    lines = [' '.join(i.keys()) for i in neg_result]
-    lines.extend([' '.join(i.keys()) for i in pos_result])
-    names = mapWordsToIDs(lines)
-    return format_result(neg_result, pos_result, names, data_type, corpus)
- 
-def format_result(neg_result, pos_result, names, data_type, corpus):
-    result = ""
-    for res in chop(neg_result, data_type, corpus):
-        result += '-1'
-        _ = res.items()
-        _.sort(key=lambda x:names[x[0]])
-        for k,v in _:
-            result += ' %s:%s'%(names[k],v)
-        result += '\n'
-    for res in chop(pos_result, data_type, corpus):
-        result += '1'
-        _ = res.items()
-        _.sort(key=lambda x:names[x[0]])
-        for k,v in _:
-            result += ' %s:%s'%(names[k],v)
-        result += '\n'
-    return result
- 
-EXPERIMENT = [expriment_one,
-            expriment_two,
-            expriment_three,
-            expriment_four]
- 
-if __name__ == '__main__':
-    print "prepare directories"
-    sys.stdout.flush()
-    base_path = os.getcwd()
+    return format_result(neg_result, pos_result, names, data_type, fold)
+
+def get_experiment_basedir(exp):
     dir_path = os.path.join(base_path, "experiments")
     if not os.path.isdir(dir_path):
         os.makedirs(dir_path)
-    for exp_index in range(1,4):
-        subdir_path = os.path.join(dir_path, "fold" + str(exp_index))
-        if not os.path.isdir(subdir_path):
-            os.makedirs(subdir_path)
-        print "perform experiment " + str(exp_index) + " ..."
-        for fold_index in range(1, 5):
-            train_data = EXPERIMENT[exp_index - 1]('train',fold_index)
-            test_data = EXPERIMENT[exp_index - 1]('test',fold_index)
-            filename = subdir_path + "/training_exp_" + str(exp_index) + "_f" + str(fold_index) + ".dat"
-            print "generate " + filename + " ..."
-            with codecs.open(filename, 'w', encoding='utf-8') as out_f:
-                out_f.write(train_data)
-                out_f.close()
-            filename = subdir_path + "/testing_exp_" + str(exp_index) + "_f" + str(fold_index) + ".dat"
-            print "generate " + filename + " ..."
-            with codecs.open(filename, 'w', encoding='utf-8') as out_f:
-                out_f.write(test_data)
-                out_f.close()
+    subdir_path = os.path.join(dir_path, "/fold" + str(exp) + "/")
+    if not os.path.isdir(subdir_path):
+        os.makedirs(subdir_path)
+    
+def generate_input_file(exp, data_type, fold, result):
+    filename = data_type + "ing_exp" + str(exp) + "_f" + str(fold) + ".dat"
+    filepath = get_experiment_basedir(exp) + "/" + filename
+    print "generate " + filename + " ..."
+    with codecs.open(filepath, 'w', encoding='utf-8') as out_f:
+        out_f.write(result)
+        out_f.close()
+
+def train_classifier(exp, fold):
+    train_filename = "training_exp" + str(exp) + "_f" + str(fold) + ".dat"
+    train_file = get_experiment_basedir(exp) + filename
+    model_filename = "model_exp" + str(exp) + "_f" + str(fold)
+    model_file = get_experiment_basedir(exp) + model_filename
+    os.system("svm_learn" + " " + train_file + " " + model_file)
+
+def evaluate_classifier(exp, fold):
+    test_filename = "testing_exp" + str(exp) + "_f" + str(fold) + ".dat"
+    test_file = get_experiment_basedir(exp) + filename
+    model_filename = "model_exp" + str(exp) + "_f" + str(fold)
+    model_file = get_experiment_basedir(exp) + model_filename
+    output_filename = "output_exp" + str(exp) + "_f" + str(fold)
+    output_file = get_experiment_basedir(exp) + output_filename
+    os.system("svm_classifier" + " " + test_file + " " + model_file + " " + output_file)
+
+PREPROCESS = [
+    preprocess_one,
+    preprocess_two,
+    preprocess_three,
+    preprocess_four,
+]
+
+def do_experiment(exp=1, fold=1):
+    print str(fold) + "-fold:preprocess data"
+    result = PREPROCESS[exp - 1]('train', fold)
+    generate_input_file(exp, 'train', fold, result)
+    result = PREPROCESS[exp - 1]('test', fold)
+    generate_input_file(exp, 'test', fold, result)
+    print str(fold) + "-fold:training classifier"
+    train_classifier(exp, fold)
+    print str(fold) + "-fold:cross_validation"
+    evaluate_classifier(exp, fold)
+ 
+def parse_args():
+    parser = OptionParser(usage="usage: %prog [options] filename",
+                          version="%prog 1.0")
+    parser.add_option("-e", "--experiment",
+                      action="store",
+                      dest="experiment",
+                      default=1,
+                      help="choose an experiment",)
+    (options, args) = parser.parse_args()
+    if not hasattr(options, 'experiment') or options.experiment > 5:
+        print 'please choos an experiment: 1 - 4'
+    return options
 
 
-    # parser = OptionParser(usage="usage: %prog [options] filename",
-    #                       version="%prog 1.0")
-    # parser.add_option("-t", "--type",
-    #                   action="store",
-    #                   dest="data_type",
-    #                   default='train',
-    #                   help="choose a data type")
-    # parser.add_option("-c", "--corpus",
-    #                   action="store", # optional because action defaults to "store"
-    #                   dest="data_corpus",
-    #                   default="1",
-    #                   help="choose a data_corpus")
-    # parser.add_option("-e", "--experiment",
-    #                   action="store", # optional because action defaults to "store"
-    #                   dest="experiment",
-    #                   default="one",
-    #                   help="choose your experiment",)
-    # (options, args) = parser.parse_args()
-    # if hasattr(options, 'data_corpus') and hasattr(options, 'data_type'):
-    #     data_type = options.data_type
-    #     data_corpus = options.data_corpus
-    #     experiment = options.experiment
-    #     EXPERIMENT[experiment](data_type, int(data_corpus))
-    # else:
-    #     print 'please choos an experiment'
+
+
+if __name__ == '__main__':
+    options = parse_args()
+    print "experiment: " + str(options.experiment) + "\n"
+    for fold in range(1, 5):
+        do_experiment(options.experiment,fold)
