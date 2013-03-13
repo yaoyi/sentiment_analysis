@@ -1,49 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-'''
-assgin2.py
-Author: linyaoyi
-Email:  linyaoyi011@gmail.com
- 
-Created on
-2013-02-28
-'''
+
+# assgin2.py
+# Author: linyaoyi
+# Email:  linyaoyi011@gmail.com 
 
 from __future__ import division
-from nltk.stem.wordnet import WordNetLemmatizer
-from math import log
+from PStemmer import PorterStemmer
+from tfidf import TfIdf
 from optparse import OptionParser
 import string
 import codecs
 import os
 import sys
 
-base_path = os.getcwd()
-lmtzr = WordNetLemmatizer()
-
-class TfIdf:
-    def __init__(self, lines):
-        result = {}
-        words = set()
-        total_count = 0
-        for line in lines:
-            for word in line.split():
-                words.add(word)
-                total_count += 1
-        for word in words:
-            result[word] = 0
- 
-        for line in lines:
-            for word in words:
-                if word in line:
-                    result[word] += 1
-        for i,j in result.items():
-            result[i] = log(total_count/j, 2)
-        self.result = result
- 
-    @property
-    def result(self):
-        return self.result
+p = PorterStemmer()
+tfidf = TfIdf()
 
 def getTop2000Words(lines):
     words = {}
@@ -78,7 +50,7 @@ def wordStemming(line):
     line = line.strip().split()
     words = []
     for word in line:
-        words.append(lmtzr.lemmatize(word))
+        words.append(p.stem(word, 0, len(word)-1))
     return ' '.join(words)
         
 def mapWordsToIDs(lines):
@@ -118,10 +90,9 @@ def filter_punctuation(lines):
     return lines
   
 def tf_idf(word, line):
-    global IDF
     tf = frequence(word, line)
-    idf = IDF.res[word]
-    return tf*idf
+    idf = tfidf.idf
+    return tf*idf[word]
  
 def frequence(word, line):
     return line.count(word)/len(line)
@@ -131,31 +102,19 @@ def generateUnigramFeatures(lines, method='TF_IDF'):
     for line in lines:
         line_result = {}
         for word in line.split():
-            if method == TF_IDF:
+            if method == 'TF_IDF':
                 line_result[word] = tf_idf(word,line)    
             else:
-                 line_result[word] = frequence(word,line)
+                line_result[word] = frequence(word,line)
         result.append(line_result)
     return result   
  
-def neg_sentence():
-    neg_lines = []
-    with open('rt-polaritydata/rt-polarity.neg') as f:
+def sentence(filepath):
+    lines = []
+    with open(filepath) as f:
         for line in f:
-            neg_lines.append(line.strip())
-    return neg_lines
- 
-def pos_sentence():
-    pos_lines = []
-    with open('rt-polaritydata/rt-polarity.pos') as f:
-        for line in f:
-            pos_lines.append(line.strip())
-    return pos_lines
- 
-DATA_TYPE = dict(
-            test = 1/5,
-            train = 4/5
-        )
+            lines.append(line.strip())
+    return lines
  
 def chop(data_list, data_type, data_fold):
     data_len = len(data_list)
@@ -188,8 +147,8 @@ def format_result(neg_result, pos_result, names, data_type, fold):
     return result
 
 def preprocess_one(data_type, fold):
-    neg_lines = neg_sentence()
-    pos_lines = pos_sentence()
+    neg_lines = sentence('rt-polaritydata/rt-polarity.neg')
+    pos_lines = sentence('rt-polaritydata/rt-polarity.pos')
     neg_lines = filter_punctuation(neg_lines)
     pos_lines = filter_punctuation(pos_lines)
     neg_lines = filter_stop_words(neg_lines)
@@ -203,8 +162,8 @@ def preprocess_one(data_type, fold):
     return format_result(neg_result, pos_result, names, data_type, fold)
 
 def preprocess_two(data_type, fold):
-    neg_lines = neg_sentence()
-    pos_lines = pos_sentence()
+    neg_lines = sentence('rt-polaritydata/rt-polarity.neg')
+    pos_lines = sentence('rt-polaritydata/rt-polarity.pos')
     neg_lines = filter_punctuation(neg_lines)
     pos_lines = filter_punctuation(pos_lines)
     neg_lines = filter_stop_words(neg_lines)
@@ -221,8 +180,8 @@ def preprocess_two(data_type, fold):
     return format_result(neg_result, pos_result, names, data_type, fold)
  
 def preprocess_three(data_type, fold):
-    neg_lines = neg_sentence()
-    pos_lines = pos_sentence()
+    neg_lines = sentence('rt-polaritydata/rt-polarity.neg')
+    pos_lines = sentence('rt-polaritydata/rt-polarity.pos')
     neg_lines = filter_punctuation(neg_lines)
     pos_lines = filter_punctuation(pos_lines)
     neg_lines = filter_stop_words(neg_lines)
@@ -230,16 +189,16 @@ def preprocess_three(data_type, fold):
  
     lines = []
     lines.extend(neg_lines)
-    lines.extend(pos_lines)
-    global IDF
-    # IDF = idf(lines)
-    # names = mapWordsToIDs(lines)
-    # neg_result = generateUnigramFeatures(neg_lines, method='TF_IDF')
-    # pos_result = generateUnigramFeatures(pos_lines, method='TF_IDF')
-    # return format_result(neg_result, pos_result, names, data_type, fold)
+    lines.extend(pos_lines) 
+    tfidf.calcidf(lines)
+    names = mapWordsToIDs(lines)
+    neg_result = generateUnigramFeatures(neg_lines, method='TF_IDF')
+    pos_result = generateUnigramFeatures(pos_lines, method='TF_IDF')
+    return format_result(neg_result, pos_result, names, data_type, fold)
+
 def preprocess_four(data_type, fold): 
-    neg_lines = neg_sentence()
-    pos_lines = pos_sentence()
+    neg_lines = sentence('rt-polaritydata/rt-polarity.neg')
+    pos_lines = sentence('rt-polaritydata/rt-polarity.pos')
     neg_lines = filter_punctuation(neg_lines)
     pos_lines = filter_punctuation(pos_lines)
     neg_lines = filter_stop_words(neg_lines)
@@ -260,12 +219,15 @@ def preprocess_four(data_type, fold):
     return format_result(neg_result, pos_result, names, data_type, fold)
 
 def get_experiment_basedir(exp):
+    base_path = os.getcwd()
     dir_path = os.path.join(base_path, "experiments")
     if not os.path.isdir(dir_path):
         os.makedirs(dir_path)
-    subdir_path = os.path.join(dir_path, "/fold" + str(exp) + "/")
+    subdir_path = os.path.join(dir_path, "fold" + str(exp) + "/")
     if not os.path.isdir(subdir_path):
         os.makedirs(subdir_path)
+    
+    return subdir_path
     
 def generate_input_file(exp, data_type, fold, result):
     filename = data_type + "ing_exp" + str(exp) + "_f" + str(fold) + ".dat"
@@ -277,19 +239,19 @@ def generate_input_file(exp, data_type, fold, result):
 
 def train_classifier(exp, fold):
     train_filename = "training_exp" + str(exp) + "_f" + str(fold) + ".dat"
-    train_file = get_experiment_basedir(exp) + filename
+    train_file = get_experiment_basedir(exp) + train_filename
     model_filename = "model_exp" + str(exp) + "_f" + str(fold)
     model_file = get_experiment_basedir(exp) + model_filename
-    os.system("svm_learn" + " " + train_file + " " + model_file)
+    os.system("./svm_learn" + " " + train_file + " " + model_file)
 
 def evaluate_classifier(exp, fold):
     test_filename = "testing_exp" + str(exp) + "_f" + str(fold) + ".dat"
-    test_file = get_experiment_basedir(exp) + filename
+    test_file = get_experiment_basedir(exp) + test_filename
     model_filename = "model_exp" + str(exp) + "_f" + str(fold)
     model_file = get_experiment_basedir(exp) + model_filename
     output_filename = "output_exp" + str(exp) + "_f" + str(fold)
     output_file = get_experiment_basedir(exp) + output_filename
-    os.system("svm_classifier" + " " + test_file + " " + model_file + " " + output_file)
+    os.system("./svm_classify" + " " + test_file + " " + model_file + " " + output_file)
 
 PREPROCESS = [
     preprocess_one,
@@ -314,6 +276,7 @@ def parse_args():
                           version="%prog 1.0")
     parser.add_option("-e", "--experiment",
                       action="store",
+                      type='int',
                       dest="experiment",
                       default=1,
                       help="choose an experiment",)
@@ -327,6 +290,6 @@ def parse_args():
 
 if __name__ == '__main__':
     options = parse_args()
-    print "experiment: " + str(options.experiment) + "\n"
-    for fold in range(1, 5):
+    print "experiment: " + str(options.experiment)
+    for fold in range(1, 6):
         do_experiment(options.experiment,fold)
