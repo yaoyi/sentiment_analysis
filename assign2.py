@@ -203,8 +203,6 @@ def preprocess_four(data_type, fold):
     pos_lines = filter_punctuation(pos_lines)
     neg_lines = filter_stop_words(neg_lines)
     pos_lines = filter_stop_words(pos_lines)
-    neg_lines = filter(lambda x:wordStemming(x), neg_lines)
-    pos_lines = filter(lambda x:wordStemming(x), pos_lines)
     neg_top_words = getTop2000Words(neg_lines)
     pos_top_words = getTop2000Words(pos_lines)
     neg_lines = filter_top_words(neg_lines, neg_top_words)
@@ -223,7 +221,7 @@ def get_experiment_basedir(exp):
     dir_path = os.path.join(base_path, "experiments")
     if not os.path.isdir(dir_path):
         os.makedirs(dir_path)
-    subdir_path = os.path.join(dir_path, "fold" + str(exp) + "/")
+    subdir_path = os.path.join(dir_path, "exp" + str(exp) + "/")
     if not os.path.isdir(subdir_path):
         os.makedirs(subdir_path)
     
@@ -283,13 +281,14 @@ def parse_args():
     (options, args) = parser.parse_args()
     if not hasattr(options, 'experiment') or options.experiment > 5:
         print 'please choos an experiment: 1 - 4'
-    return options
-
-
+        return False,options
+    return True,options
 
 
 if __name__ == '__main__':
-    options = parse_args()
+    ret,options = parse_args()
+    if not ret:
+        exit(1)
     print "experiment: " + str(options.experiment)
     for fold in range(1, 6):
         do_experiment(options.experiment,fold)
